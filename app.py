@@ -110,23 +110,12 @@ def index():
     # 並び替え
     sort = request.args.get("sort")
 
-    if sort == "new":
-        rows = db.execute("""
-            SELECT id, title, done, deadline
-            FROM tasks
-            WHERE user_id=?
-            ORDER BY position ASC
-        """, (user_id,)).fetchall()
-    else:
-        rows = db.execute("""
-            SELECT id, title, done, deadline
-            FROM tasks
-            WHERE user_id=?
-            ORDER BY
-                CASE WHEN deadline IS NULL OR deadline='' THEN 1 ELSE 0 END,
-                deadline ASC,
-                id DESC
-        """, (user_id,)).fetchall()
+    rows = db.execute("""
+        SELECT id, title, done, deadline
+        FROM tasks
+        WHERE user_id=?
+        ORDER BY position ASC
+    """, (user_id,)).fetchall()
 
     today = datetime.today().strftime("%Y-%m-%d")
 
@@ -283,33 +272,26 @@ if __name__ == "__main__":
     app.run(debug=True)
 
 
-with app.app_context():
-    db = get_db()
-    try:
-        db.execute("ALTER TABLE tasks ADD COLUMN position INTEGER")
-        db.commit()
-    except:
-        pass
-    
 from flask import jsonify
+
+
 
 @app.route("/reorder", methods=["POST"])
 def reorder():
-    if not require_login():
-        return jsonify({"status": "error"})
-
-    db = get_db()
-    user_id = session["user_id"]
+    if "user_id" not in session:
+        return "", 403
 
     data = request.get_json()
     order = data.get("order", [])
 
+    db = get_db()
+    user_id = session["user_id"]
+
     for index, task_id in enumerate(order):
         db.execute(
-            "UPDATE tasks SET position=? WHERE id=? AND user_id=?",
+            
             (index, task_id, user_id)
         )
 
     db.commit()
-
-    return jsonify({"status": "ok"})
+    return "", 200

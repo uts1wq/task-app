@@ -46,87 +46,64 @@
     <!-- タスクリスト -->
     <div class="task-list" id="task-list">
 
-        {% for task in tasks %}
-        <div class="task-card {% if task.overdue %}overdue{% endif %}"
+{% for task in tasks %}
+<div class="task-card {% if task.overdue %}overdue{% endif %}"
      draggable="true"
      data-id="{{ task.id }}">
 
-            <!-- 左 -->
-            <div class="task-info">
+    <div class="task-info">
 
-                <!-- 表示 -->
-                <div id="text-{{ task.id }}" class="task-title {% if task.done %}done{% endif %}">
-                    {% if task.done %}✔ {% endif %}
-                    {{ task.title }}
-                </div>
-
-                <!-- 編集フォーム -->
-                <form id="edit-{{ task.id }}"
-                      class="edit-form"
-                      method="POST"
-                      action="/edit/{{ task.id }}"
-                      style="display:none;">
-
-                    <input type="text" name="task" value="{{ task.title }}" required>
-                    <input type="date" name="deadline" value="{{ task.deadline }}">
-
-                    <button type="submit" class="btn-edit">保存</button>
-                </form>
-
-                <div class="deadline">
-                    期限: {{ task.deadline if task.deadline else 'なし' }}
-                </div>
-
-            </div>
-
-            <!-- 右 -->
-            <div class="actions">
-
-                <button type="button"
-                        onclick="toggleTask({{ task.id }})"
-                        class="btn-done">
-                    完了
-                </button>
-
-                <button type="button"
-                        onclick="toggleEdit({{ task.id }})"
-                        class="btn-edit">
-                    編集
-                </button>
-
-                <button type="button"
-                        onclick="deleteTask({{ task.id }})"
-                        class="btn-delete">
-                    削除
-                </button>
-
-            </div>
-
+        <div id="text-{{ task.id }}" class="task-title {% if task.done %}done{% endif %}">
+            {% if task.done %}✔ {% endif %}
+            {{ task.title }}
         </div>
-        {% endfor %}
+
+        <form id="edit-{{ task.id }}"
+              class="edit-form"
+              method="POST"
+              action="/edit/{{ task.id }}"
+              style="display:none;">
+
+            <input type="text" name="task" value="{{ task.title }}" required>
+            <input type="date" name="deadline" value="{{ task.deadline }}">
+            <button type="submit" class="btn-edit">保存</button>
+        </form>
+
+        <div class="deadline">
+            期限: {{ task.deadline if task.deadline else 'なし' }}
+        </div>
 
     </div>
+
+    <div class="actions">
+        <button type="button" onclick="toggleTask({{ task.id }})" class="btn-done">完了</button>
+        <button type="button" onclick="toggleEdit({{ task.id }})" class="btn-edit">編集</button>
+        <button type="button" onclick="deleteTask({{ task.id }})" class="btn-delete">削除</button>
+    </div>
+
+</div>
+{% endfor %}
+
+</div>
 
 </div>
 
 <!-- JS -->
 <script>
 
-// 完了（ページ遷移なし）
+// =========================
+// 共通処理
+// =========================
 function toggleTask(id){
-    fetch("/toggle/" + id)
-        .then(() => location.reload());
+    fetch("/toggle/" + id).then(() => location.reload());
 }
 
-// 削除（確認付き）
 function deleteTask(id){
-    if(confirm("本当に削除する？")){
-        fetch("/delete/" + id)
-            .then(() => location.reload());
+    if(confirm("削除する？")){
+        fetch("/delete/" + id).then(() => location.reload());
     }
 }
 
-// 編集トグル
 function toggleEdit(id){
     const text = document.getElementById("text-" + id);
     const form = document.getElementById("edit-" + id);
@@ -140,35 +117,25 @@ function toggleEdit(id){
     }
 }
 
-</script>
-<script>
-
+// =========================
+// ドラッグ（PC）
+// =========================
 let dragged = null;
-
 const list = document.getElementById("task-list");
 
-// ドラッグ開始
 list.addEventListener("dragstart", (e) => {
     dragged = e.target.closest(".task-card");
     dragged.classList.add("dragging");
 });
 
-// ドラッグ中
 list.addEventListener("dragover", (e) => {
     e.preventDefault();
 
     const target = e.target.closest(".task-card");
-
     if (!target || target === dragged) return;
 
     const rect = target.getBoundingClientRect();
     const offset = e.clientY - rect.top;
-
-    // 視覚フィードバック
-    document.querySelectorAll(".task-card").forEach(el => {
-        el.classList.remove("over");
-    });
-    target.classList.add("over");
 
     if (offset > rect.height / 2) {
         target.after(dragged);
@@ -177,56 +144,32 @@ list.addEventListener("dragover", (e) => {
     }
 });
 
-// ドラッグ終了
 list.addEventListener("dragend", () => {
-    dragged.classList.remove("dragging");
-
-    document.querySelectorAll(".task-card").forEach(el => {
-        el.classList.remove("over");
-    });
-
-    saveOrder();
+    if(dragged){
+        dragged.classList.remove("dragging");
+        saveOrder();
+    }
 });
-// 並び順をサーバーへ送信
-function saveOrder(){
-    const ids = [...document.querySelectorAll(".task-card")]
-        .map(el => el.dataset.id);
 
-    fetch("/reorder", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({order: ids})
-    });
-}
-
-</script>
-
-<script>
-
-// ===== スマホ用ドラッグ =====
+// =========================
+// スマホドラッグ
+// =========================
 let touchItem = null;
-let startY = 0;
-
-const list = document.getElementById("task-list");
 
 list.addEventListener("touchstart", (e) => {
     const card = e.target.closest(".task-card");
     if (!card) return;
 
     touchItem = card;
-    startY = e.touches[0].clientY;
-
     card.classList.add("dragging");
 });
 
 list.addEventListener("touchmove", (e) => {
     if (!touchItem) return;
 
-    e.preventDefault(); // ←スクロール止める
+    e.preventDefault();
 
-    const currentY = e.touches[0].clientY;
+    const y = e.touches[0].clientY;
 
     const items = [...document.querySelectorAll(".task-card")];
 
@@ -234,10 +177,10 @@ list.addEventListener("touchmove", (e) => {
         if (item === touchItem) return;
 
         const rect = item.getBoundingClientRect();
-        const middle = rect.top + rect.height / 2;
+        const mid = rect.top + rect.height / 2;
 
-        if (currentY > rect.top && currentY < rect.bottom) {
-            if (currentY > middle) {
+        if (y > rect.top && y < rect.bottom) {
+            if (y > mid) {
                 item.after(touchItem);
             } else {
                 item.before(touchItem);
@@ -252,12 +195,23 @@ list.addEventListener("touchend", () => {
     touchItem.classList.remove("dragging");
     touchItem = null;
 
-    saveOrder(); // ←既存のやつ使う
+    saveOrder();
 });
 
-navigator.vibrate(10);
+// =========================
+// 並び保存
+// =========================
+function saveOrder(){
+    const ids = [...document.querySelectorAll(".task-card")]
+        .map(el => el.dataset.id);
+
+    fetch("/reorder", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({order: ids})
+    });
+}
 
 </script>
-
 </body>
 </html>
