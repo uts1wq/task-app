@@ -121,8 +121,10 @@ list.addEventListener("dragover", (e) => {
    animateReorder(() => {
     if (offset > rect.height / 2) {
         target.after(dragged);
+	animateReorder();
     } else {
         target.before(dragged);
+	animateReorder;
     }
 });
 });
@@ -230,6 +232,42 @@ list.addEventListener("touchend", () => {
 // =========================
 // 保存
 // =========================
+
+function animateReorder() {
+    const items = document.querySelectorAll(".task-card");
+
+    const positions = new Map();
+
+    // ① 位置記録
+    items.forEach(el => {
+        positions.set(el, el.getBoundingClientRect());
+    });
+
+    // ② 次フレームで差分計算
+    requestAnimationFrame(() => {
+        items.forEach(el => {
+            const old = positions.get(el);
+            const newPos = el.getBoundingClientRect();
+
+            const dx = old.left - newPos.left;
+            const dy = old.top - newPos.top;
+
+            if (dx || dy) {
+                el.style.transform = `translate(${dx}px, ${dy}px)`;
+
+                requestAnimationFrame(() => {
+                    el.style.transition = "transform 0.25s ease";
+                    el.style.transform = "";
+                });
+
+                el.addEventListener("transitionend", () => {
+                    el.style.transition = "";
+                }, { once: true });
+            }
+        });
+    });
+}
+
 function saveOrder(){
     const ids = [...document.querySelectorAll(".task-card")]
         .map(el => el.dataset.id);
