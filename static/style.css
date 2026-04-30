@@ -147,3 +147,5 @@ button {
     flex-wrap: wrap;
     margin-top: 6px;
 }
+
+.task-card { touch-action: none; } /* スマホでスクロールと競合しないように */

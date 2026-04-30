@@ -43,7 +43,6 @@
 
         {% for task in tasks %}
         <div class="task-card {% if task.overdue %}overdue{% endif %}"
-             draggable="true"
              data-id="{{ task.id }}">
 
             <div class="task-info">
@@ -122,82 +121,88 @@ function toggleEdit(id) {
 }
 
 // =========================
-// ドラッグ（PC）
+// ドラッグ（Pointer Events / PC・スマホ共通）
 // =========================
-let dragged = null;
 const list = document.getElementById("task-list");
 
-list.addEventListener("dragstart", (e) => {
-    dragged = e.target.closest(".task-card");
-    dragged.classList.add("dragging");
-});
+let dragging = null;
+let ghost    = null;
+let offsetX  = 0;
+let offsetY  = 0;
 
-list.addEventListener("dragover", (e) => {
-    e.preventDefault();
-
-    const target = e.target.closest(".task-card");
-    if (!target || target === dragged) return;
-
-    const rect = target.getBoundingClientRect();
-    const offset = e.clientY - rect.top;
-
-    if (offset > rect.height / 2) {
-        target.after(dragged);
-    } else {
-        target.before(dragged);
-    }
-});
-
-list.addEventListener("dragend", () => {
-    if (dragged) {
-        dragged.classList.remove("dragging");
-        saveOrder();
-    }
-});
-
-// =========================
-// ドラッグ（スマホ）
-// =========================
-let touchItem = null;
-
-list.addEventListener("touchstart", (e) => {
+function pointerDown(e) {
     const card = e.target.closest(".task-card");
     if (!card) return;
-    touchItem = card;
-    card.classList.add("dragging");
-});
 
-// ← ここが壊れていた。{ passive: false } は末尾のオプションとして正しく渡す
-list.addEventListener("touchmove", (e) => {
-    if (!touchItem) return;
+    // ボタン・input操作中はドラッグしない
+    if (e.target.closest("button, input, form")) return;
 
     e.preventDefault();
+    list.setPointerCapture(e.pointerId);
 
-    const y = e.touches[0].clientY;
-    const items = [...document.querySelectorAll(".task-card")];
+    dragging = card;
+    dragging.style.opacity = "0";
 
-    items.forEach(item => {
-        if (item === touchItem) return;
+    // ゴースト（動く本体）を生成
+    const rect = card.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
 
-        const rect = item.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
+    ghost = card.cloneNode(true);
+    ghost.style.cssText = `
+        position: fixed;
+        width: ${rect.width}px;
+        left: ${rect.left}px;
+        top: ${rect.top}px;
+        pointer-events: none;
+        z-index: 999;
+        transform: rotate(1.5deg) scale(1.03);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        transition: transform 0.1s ease;
+        border-radius: 10px;
+        background: white;
+        padding: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        opacity: 0.95;
+    `;
+    document.body.appendChild(ghost);
+}
 
-        if (y > rect.top && y < rect.bottom) {
-            if (y > mid) {
-                item.after(touchItem);
-            } else {
-                item.before(touchItem);
-            }
+function pointerMove(e) {
+    if (!ghost || !dragging) return;
+
+    // ゴーストをポインタに追従
+    ghost.style.left = (e.clientX - offsetX) + "px";
+    ghost.style.top  = (e.clientY - offsetY) + "px";
+
+    // 挿入位置を判定
+    const cards = [...list.querySelectorAll(".task-card")];
+    for (const card of cards) {
+        if (card === dragging) continue;
+        const rect = card.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+            list.insertBefore(dragging, card);
+            return;
         }
-    });
-}, { passive: false });  // ← ここ
+    }
+    list.appendChild(dragging);
+}
 
-list.addEventListener("touchend", () => {
-    if (!touchItem) return;
-    touchItem.classList.remove("dragging");
-    touchItem = null;
+function pointerUp() {
+    if (!dragging) return;
+
+    dragging.style.opacity = "";
+    if (ghost) { ghost.remove(); ghost = null; }
+    dragging = null;
+
     saveOrder();
-});
+}
+
+list.addEventListener("pointerdown", pointerDown);
+list.addEventListener("pointermove", pointerMove);
+list.addEventListener("pointerup",   pointerUp);
 
 // =========================
 // 並び順を保存
