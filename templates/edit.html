@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <title>タスク編集</title>
@@ -15,46 +16,64 @@
 
     <h1>タスク編集</h1>
 
-    <!-- 編集フォーム -->
-    <form method="POST" class="task-form">
+    <!-- 編集カード -->
+    <div class="task-card">
 
-        <input 
-            type="text" 
-            name="task" 
-            value="{{ task[2] if task is iterable else task.title }}" 
-            placeholder="タスク名"
-            required
-        >
+        <form method="POST" class="edit-form">
 
-        <input 
-            type="date" 
-            name="deadline" 
-            value="{{ task[4] if task is iterable else task.deadline }}"
-        >
 
-        <button type="submit">保存</button>
-    </form>
+    <!-- タスク名（元データ入り） -->
+    <input 
+        type="text"
+        name="task"
+        value="{{ task.title }}"
+        required
+    >
+
+    <!-- 期限（元データ入り） -->
+    <input 
+        type="date"
+        name="deadline"
+        value="{{ task.deadline }}"
+    >
+
+    <button type="submit" class="btn-edit">
+        保存
+    </button>
+
+</form>
+
+    </div>
 
     <!-- プレビュー -->
-    <div class="task-preview">
+    <div class="task-card">
+
+        <h3>プレビュー</h3>
 
         <p>
-            現在のタスク：
-            <strong>
-                {{ task[2] if task is iterable else task.title }}
-            </strong>
+            タスク：
+            <strong>{{ task.title }}</strong>
         </p>
 
         <p>
             期限：
-            {{ task[4] if task is iterable else task.deadline }}
+            {{ task.deadline if task.deadline else "未設定" }}
+        </p>
+
+        <p>
+            状態：
+            {% if task.done %}
+                完了済み
+            {% else %}
+                未完了
+            {% endif %}
         </p>
 
     </div>
 
     <!-- 戻る -->
-    <div style="margin-top: 20px;">
-        <a href="/">← 戻る</a>
+    <div style="margin-top: 20px; text-align:center;">
+        <a href="/">← タスク一覧へ戻る</a>
     </div>
 
 </div>

@@ -18,14 +18,14 @@ h1 {
     margin-bottom: 10px;
 }
 
-/* ユーザー表示 */
+/* ユーザー */
 .user {
     text-align: center;
     color: #666;
     margin-bottom: 10px;
 }
 
-/* ログアウト */
+/* リンク */
 a {
     color: #333;
     text-decoration: none;
@@ -52,7 +52,9 @@ a:hover {
     font-weight: bold;
 }
 
-/* フォーム */
+/* =========================
+   フォーム
+========================= */
 form {
     display: flex;
     gap: 8px;
@@ -67,16 +69,22 @@ input {
     outline: none;
 }
 
-/* 全ボタン共通 */
+/* ボタン共通 */
 button {
     border: none;
     border-radius: 6px;
     padding: 8px 12px;
     cursor: pointer;
     color: white;
-    transition: 0.2s;
+    transition: 0.15s;
 }
 
+/* クリック感 */
+button:active {
+    transform: scale(0.97);
+}
+
+/* hover */
 button:hover {
     opacity: 0.85;
 }
@@ -97,29 +105,39 @@ button:hover {
     gap: 12px;
 }
 
-/* 左側情報 */
+/* 左側 */
 .task-info {
     flex: 1;
 }
 
+/* タイトル */
 .task-title {
     font-size: 16px;
     margin-bottom: 4px;
 }
 
+/* 期限 */
 .deadline {
     font-size: 12px;
     color: #888;
 }
 
-/* 右側ボタン群 */
-.actions {
+/* =========================
+   編集フォーム（重要追加）
+========================= */
+.edit-form {
     display: flex;
     gap: 6px;
+    margin-top: 6px;
+}
+
+.edit-form input {
+    padding: 6px;
+    font-size: 14px;
 }
 
 /* =========================
-   ボタン（完全class管理）
+   ボタン
 ========================= */
 
 .btn-add {
@@ -153,7 +171,7 @@ button:hover {
 }
 
 /* =========================
-   スマホ対応
+   スマホ
 ========================= */
 @media (max-width: 600px) {
 
@@ -173,6 +191,31 @@ button:hover {
 
     .actions {
         width: 100%;
+        display: flex;
         justify-content: space-between;
     }
+
+    .edit-form {
+        flex-direction: column;
+    }
+}
+
+.task-card.dragging {
+    opacity: 0.5;
+}
+/* ===== ドラッグ中 ===== */
+.task-card.dragging {
+    opacity: 0.5;
+    transform: scale(1.03);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+/* 動くときのアニメーション */
+.task-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ドロップ位置の余白 */
+.task-card.over {
+    border: 2px dashed #aaa;
 }
