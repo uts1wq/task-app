@@ -1,12 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
     <meta charset="UTF-8">
     <title>Task App</title>
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
@@ -14,7 +11,6 @@
 
 <div class="container">
 
-    <!-- ヘッダー -->
     <h1>タスク管理</h1>
 
     <p class="user">ログイン中: {{ username }}</p>
@@ -23,76 +19,61 @@
         <a href="/logout">ログアウト</a>
     </div>
 
-    <!-- 並び替え -->
-    <div class="sort">
-        <a href="/?sort=deadline"
-           class="{% if request.args.get('sort') != 'new' %}active{% endif %}">
-           期限順
-        </a>
-
-        <a href="/?sort=new"
-           class="{% if request.args.get('sort') == 'new' %}active{% endif %}">
-           新しい順
-        </a>
-    </div>
-
-    <!-- 追加フォーム -->
+    <!-- 追加 -->
     <form method="POST" class="task-form">
         <input type="text" name="task" placeholder="タスクを入力" required>
         <input type="date" name="deadline">
         <button type="submit" class="btn-add">追加</button>
     </form>
 
-    <!-- タスクリスト -->
+    <!-- リスト -->
     <div class="task-list" id="task-list">
 
-{% for task in tasks %}
-<div class="task-card {% if task.overdue %}overdue{% endif %}"
-     draggable="true"
-     data-id="{{ task.id }}">
+    {% for task in tasks %}
+    <div class="task-card {% if task.overdue %}overdue{% endif %}"
+         draggable="true"
+         data-id="{{ task.id }}">
 
-    <div class="task-info">
+        <div class="task-info">
 
-        <div id="text-{{ task.id }}" class="task-title {% if task.done %}done{% endif %}">
-            {% if task.done %}✔ {% endif %}
-            {{ task.title }}
+            <div id="text-{{ task.id }}" class="task-title {% if task.done %}done{% endif %}">
+                {% if task.done %}✔ {% endif %}
+                {{ task.title }}
+            </div>
+
+            <form id="edit-{{ task.id }}"
+                  class="edit-form"
+                  method="POST"
+                  action="/edit/{{ task.id }}"
+                  style="display:none;">
+                <input type="text" name="task" value="{{ task.title }}" required>
+                <input type="date" name="deadline" value="{{ task.deadline }}">
+                <button type="submit" class="btn-edit">保存</button>
+            </form>
+
+            <div class="deadline">
+                期限: {{ task.deadline if task.deadline else 'なし' }}
+            </div>
+
         </div>
 
-        <form id="edit-{{ task.id }}"
-              class="edit-form"
-              method="POST"
-              action="/edit/{{ task.id }}"
-              style="display:none;">
-
-            <input type="text" name="task" value="{{ task.title }}" required>
-            <input type="date" name="deadline" value="{{ task.deadline }}">
-            <button type="submit" class="btn-edit">保存</button>
-        </form>
-
-        <div class="deadline">
-            期限: {{ task.deadline if task.deadline else 'なし' }}
+        <div class="actions">
+            <button type="button" onclick="toggleTask({{ task.id }})" class="btn-done">完了</button>
+            <button type="button" onclick="toggleEdit({{ task.id }})" class="btn-edit">編集</button>
+            <button type="button" onclick="deleteTask({{ task.id }})" class="btn-delete">削除</button>
         </div>
 
     </div>
+    {% endfor %}
 
-    <div class="actions">
-        <button type="button" onclick="toggleTask({{ task.id }})" class="btn-done">完了</button>
-        <button type="button" onclick="toggleEdit({{ task.id }})" class="btn-edit">編集</button>
-        <button type="button" onclick="deleteTask({{ task.id }})" class="btn-delete">削除</button>
     </div>
 
 </div>
-{% endfor %}
 
-</div>
-
-</div>
-
-<!-- JS -->
 <script>
 
 // =========================
-// 共通処理
+// 共通
 // =========================
 function toggleTask(id){
     fetch("/toggle/" + id).then(() => location.reload());
@@ -118,7 +99,7 @@ function toggleEdit(id){
 }
 
 // =========================
-// ドラッグ（PC）
+// PCドラッグ
 // =========================
 let dragged = null;
 const list = document.getElementById("task-list");
@@ -152,20 +133,27 @@ list.addEventListener("dragend", () => {
 });
 
 // =========================
-// スマホドラッグ
+// スマホ（長押しドラッグ）
 // =========================
 let touchItem = null;
+let holdTimer = null;
+let isDragging = false;
 
 list.addEventListener("touchstart", (e) => {
     const card = e.target.closest(".task-card");
     if (!card) return;
 
-    touchItem = card;
-    card.classList.add("dragging");
+    // 長押しで開始
+    holdTimer = setTimeout(() => {
+        touchItem = card;
+        isDragging = true;
+        card.classList.add("dragging");
+        navigator.vibrate?.(10);
+    }, 300);
 });
 
 list.addEventListener("touchmove", (e) => {
-    if (!touchItem) return;
+    if (!isDragging || !touchItem) return;
 
     e.preventDefault();
 
@@ -190,16 +178,19 @@ list.addEventListener("touchmove", (e) => {
 });
 
 list.addEventListener("touchend", () => {
+    clearTimeout(holdTimer);
+
     if (!touchItem) return;
 
     touchItem.classList.remove("dragging");
     touchItem = null;
+    isDragging = false;
 
     saveOrder();
 });
 
 // =========================
-// 並び保存
+// 保存
 // =========================
 function saveOrder(){
     const ids = [...document.querySelectorAll(".task-card")]
@@ -213,5 +204,6 @@ function saveOrder(){
 }
 
 </script>
+
 </body>
 </html>
