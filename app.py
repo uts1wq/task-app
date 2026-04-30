@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session, g
+from flask import Flask, render_template, request, redirect, session, g, jsonify
 import sqlite3
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,33 +6,33 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.secret_key = "secret-key"
 
-
-# =======================
-# DB管理（重要改善）
-# =======================
 DATABASE = "tasks.db"
 
+
+# =======================
+# DB管理
+# =======================
 def get_db():
     if "db" not in g:
         g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row  # ← dictみたいに扱える
+        g.db.row_factory = sqlite3.Row
     return g.db
 
+
 @app.teardown_appcontext
-def close_db(exception):
+def close_db(e=None):
     db = g.pop("db", None)
     if db:
         db.close()
 
 
 # =======================
-# DB初期化
+# 初期化
 # =======================
 def init_db():
     db = get_db()
-    cursor = db.cursor()
 
-    cursor.execute("""
+    db.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
@@ -40,12 +40,12 @@ def init_db():
     )
     """)
 
-    cursor.execute("""
+    db.execute("""
     CREATE TABLE IF NOT EXISTS tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         title TEXT,
-        done INTEGER,
+        done INTEGER DEFAULT 0,
         deadline TEXT,
         position INTEGER
     )
@@ -53,12 +53,13 @@ def init_db():
 
     db.commit()
 
+
 with app.app_context():
     init_db()
 
 
 # =======================
-# ログインチェック
+# 共通
 # =======================
 def require_login():
     if "user_id" not in session:
@@ -85,13 +86,12 @@ def index():
 
     username = user["username"] if user else "user"
 
-    # 追加
+    # タスク追加
     if request.method == "POST":
         task = request.form.get("task", "").strip()
         deadline = request.form.get("deadline")
 
         if task:
-            # 最大position取得
             row = db.execute(
                 "SELECT MAX(position) as max_pos FROM tasks WHERE user_id=?",
                 (user_id,)
@@ -99,17 +99,16 @@ def index():
 
             new_pos = (row["max_pos"] + 1) if row["max_pos"] is not None else 0
 
-            db.execute(
-                "INSERT INTO tasks (user_id, title, done, deadline, position) VALUES (?, ?, ?, ?, ?)",
-                (user_id, task, 0, deadline, new_pos)
-            )
+            db.execute("""
+                INSERT INTO tasks (user_id, title, done, deadline, position)
+                VALUES (?, ?, 0, ?, ?)
+            """, (user_id, task, deadline, new_pos))
+
             db.commit()
 
         return redirect("/")
 
-    # 並び替え
-    sort = request.args.get("sort")
-
+    # タスク取得（並びは常にposition）
     rows = db.execute("""
         SELECT id, title, done, deadline
         FROM tasks
@@ -155,7 +154,7 @@ def toggle(id):
         )
         db.commit()
 
-    return redirect("/")
+    return "", 204
 
 
 # =======================
@@ -175,7 +174,7 @@ def delete(id):
     )
     db.commit()
 
-    return redirect("/")
+    return "", 204
 
 
 # =======================
@@ -201,6 +200,32 @@ def edit(id):
         db.commit()
 
     return redirect("/")
+
+
+# =======================
+# 並び替え（最重要）
+# =======================
+@app.route("/reorder", methods=["POST"])
+def reorder():
+    if not require_login():
+        return jsonify({"status": "error"}), 403
+
+    db = get_db()
+    user_id = session["user_id"]
+
+    data = request.get_json()
+    order = data.get("order", [])
+
+    for index, task_id in enumerate(order):
+        db.execute("""
+            UPDATE tasks
+            SET position=?
+            WHERE id=? AND user_id=?
+        """, (index, task_id, user_id))
+
+    db.commit()
+
+    return jsonify({"status": "ok"})
 
 
 # =======================
@@ -270,28 +295,3 @@ def logout():
 # =======================
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-from flask import jsonify
-
-
-
-@app.route("/reorder", methods=["POST"])
-def reorder():
-    if "user_id" not in session:
-        return "", 403
-
-    data = request.get_json()
-    order = data.get("order", [])
-
-    db = get_db()
-    user_id = session["user_id"]
-
-    for index, task_id in enumerate(order):
-        db.execute(
-            
-            (index, task_id, user_id)
-        )
-
-    db.commit()
-    return "", 200
