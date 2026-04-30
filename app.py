@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session, g, jsonify
+from flask import Flask, render_template, request, redirect, session, g, jsonify  # ← jsonifyをここに移動
 import sqlite3
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,33 +6,33 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.secret_key = "secret-key"
 
-DATABASE = "tasks.db"
-
 
 # =======================
 # DB管理
 # =======================
+DATABASE = "tasks.db"
+
 def get_db():
     if "db" not in g:
         g.db = sqlite3.connect(DATABASE)
         g.db.row_factory = sqlite3.Row
     return g.db
 
-
 @app.teardown_appcontext
-def close_db(e=None):
+def close_db(exception):
     db = g.pop("db", None)
     if db:
         db.close()
 
 
 # =======================
-# 初期化
+# DB初期化
 # =======================
 def init_db():
     db = get_db()
+    cursor = db.cursor()
 
-    db.execute("""
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
@@ -40,26 +40,31 @@ def init_db():
     )
     """)
 
-    db.execute("""
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         title TEXT,
-        done INTEGER DEFAULT 0,
+        done INTEGER,
         deadline TEXT,
         position INTEGER
     )
     """)
 
-    db.commit()
+    # ← マイグレーションをここに移動（重複reorderルートの削除と合わせて整理）
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN position INTEGER")
+    except:
+        pass
 
+    db.commit()
 
 with app.app_context():
     init_db()
 
 
 # =======================
-# 共通
+# ログインチェック
 # =======================
 def require_login():
     if "user_id" not in session:
@@ -78,7 +83,6 @@ def index():
     db = get_db()
     user_id = session["user_id"]
 
-    # ユーザー名
     user = db.execute(
         "SELECT username FROM users WHERE id=?",
         (user_id,)
@@ -86,7 +90,6 @@ def index():
 
     username = user["username"] if user else "user"
 
-    # タスク追加
     if request.method == "POST":
         task = request.form.get("task", "").strip()
         deadline = request.form.get("deadline")
@@ -99,22 +102,34 @@ def index():
 
             new_pos = (row["max_pos"] + 1) if row["max_pos"] is not None else 0
 
-            db.execute("""
-                INSERT INTO tasks (user_id, title, done, deadline, position)
-                VALUES (?, ?, 0, ?, ?)
-            """, (user_id, task, deadline, new_pos))
-
+            db.execute(
+                "INSERT INTO tasks (user_id, title, done, deadline, position) VALUES (?, ?, ?, ?, ?)",
+                (user_id, task, 0, deadline, new_pos)
+            )
             db.commit()
 
         return redirect("/")
 
-    # タスク取得（並びは常にposition）
-    rows = db.execute("""
-        SELECT id, title, done, deadline
-        FROM tasks
-        WHERE user_id=?
-        ORDER BY position ASC
-    """, (user_id,)).fetchall()
+    # ← "new" を "manual" に統一
+    sort = request.args.get("sort")
+
+    if sort == "manual":
+        rows = db.execute("""
+            SELECT id, title, done, deadline
+            FROM tasks
+            WHERE user_id=?
+            ORDER BY position ASC
+        """, (user_id,)).fetchall()
+    else:
+        rows = db.execute("""
+            SELECT id, title, done, deadline
+            FROM tasks
+            WHERE user_id=?
+            ORDER BY
+                CASE WHEN deadline IS NULL OR deadline='' THEN 1 ELSE 0 END,
+                deadline ASC,
+                id DESC
+        """, (user_id,)).fetchall()
 
     today = datetime.today().strftime("%Y-%m-%d")
 
@@ -132,9 +147,9 @@ def index():
 
 
 # =======================
-# 完了切替
+# 完了切替 ← methodsにPOSTを追加
 # =======================
-@app.route("/toggle/<int:id>")
+@app.route("/toggle/<int:id>", methods=["POST"])
 def toggle(id):
     if not require_login():
         return redirect("/login")
@@ -154,13 +169,13 @@ def toggle(id):
         )
         db.commit()
 
-    return "", 204
+    return redirect("/")
 
 
 # =======================
-# 削除
+# 削除 ← methodsにPOSTを追加
 # =======================
-@app.route("/delete/<int:id>")
+@app.route("/delete/<int:id>", methods=["POST"])
 def delete(id):
     if not require_login():
         return redirect("/login")
@@ -174,7 +189,7 @@ def delete(id):
     )
     db.commit()
 
-    return "", 204
+    return redirect("/")
 
 
 # =======================
@@ -203,7 +218,7 @@ def edit(id):
 
 
 # =======================
-# 並び替え（最重要）
+# reorder ← 重複を削除して1つに統一
 # =======================
 @app.route("/reorder", methods=["POST"])
 def reorder():
@@ -217,14 +232,12 @@ def reorder():
     order = data.get("order", [])
 
     for index, task_id in enumerate(order):
-        db.execute("""
-            UPDATE tasks
-            SET position=?
-            WHERE id=? AND user_id=?
-        """, (index, task_id, user_id))
+        db.execute(
+            "UPDATE tasks SET position=? WHERE id=? AND user_id=?",
+            (index, task_id, user_id)
+        )
 
     db.commit()
-
     return jsonify({"status": "ok"})
 
 
@@ -241,7 +254,6 @@ def register():
             return redirect("/register")
 
         hashed = generate_password_hash(password)
-
         db = get_db()
 
         try:
