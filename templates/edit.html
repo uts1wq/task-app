@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+   	 <title>編集</title>
+
+   	 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+</head>
+
+<body>
+    <h1>タスク編集</h1>
+
+    <form method="POST">
+        <input type="text" name="task" value="{{ task.title }}">
+	<input type="date" name="deadline" value="{{ task.deadline }}">
+        <button type="submit">保存</button>
+    </form>
+
+    <a href="/">← 戻る</a>
+</body>
+</html>

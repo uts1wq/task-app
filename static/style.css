@@ -1,0 +1,98 @@
+body {
+    font-family: Arial, sans-serif;
+    max-width: 600px;
+    margin: 40px auto;
+    background: #f5f5f5;
+}
+
+h1 {
+    text-align: center;
+}
+
+form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+input {
+    flex: 1;
+    padding: 8px;
+}
+
+button {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: white;
+}
+
+button:hover {
+    opacity: 0.8;
+}
+
+button:nth-of-type(1) {
+    background: #4CAF50; /* 完了 */
+}
+
+button:nth-of-type(2) {
+    background: #2196F3; /* 編集 */
+}
+
+button:nth-of-type(3) {
+    background: #f44336; /* 削除 */
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    background: white;
+    margin-bottom: 8px;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 6px;
+}
+
+a {
+    margin-left: 8px;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.done {
+    text-decoration: line-through;
+    color: gray;
+}
+
+@media (max-width: 600px) {
+    body {
+        margin: 10px;
+        font-size: 16px;
+    }
+
+    form {
+        flex-direction: column;
+    }
+
+    input, button {
+        width: 100%;
+        font-size: 16px;
+    }
+
+    li {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+}
+.overdue {
+    border-left: 5px solid red;
+    background: #ffe5e5;
+    font-weight: bold;
+}

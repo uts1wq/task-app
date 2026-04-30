@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Task App</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+   </head>
+<body>
+    <h1>タスク管理</h1>
+    <p>ログイン中: {{ username }}</p>
+    <div style="text-align:right;">
+    <a href="/logout">ログアウト</a>
+    </div>
+    <div>
+    <a href="/?sort=deadline" {% if request.args.get("sort") != "new" %}style="font-weight:bold"{% endif %}>期限順</a>
+    <a href="/?sort=new" {% if request.args.get("sort") == "new" %}style="font-weight:bold"{% endif %}>新しい順</a>
+</div>
+    <form method="POST">
+        <input type="text" name="task" placeholder="タスクを入力">
+	<input type="date" name="deadline">
+	<button type="submit">追加</button>
+    </form>
+
+    <ul>
+{% for task in tasks %}
+    <li class="{% if task.overdue %}overdue{% endif %}">
+        
+        <span class="{% if task.done %}done{% endif %}">
+            {% if task.done %}✔ {% endif %}
+            {{ task.title }}（期限: {{ task.deadline }}）
+        </span>
+
+        <button onclick="location.href='/toggle/{{ task.id }}'">✔</button>
+        <button onclick="location.href='/edit/{{ task.id }}'">編集</button>
+        <button onclick="location.href='/delete/{{ task.id }}'">削除</button>
+
+    </li>
+{% endfor %}
+</ul>
+</body>
+</html>
