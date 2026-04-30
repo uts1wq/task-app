@@ -118,12 +118,47 @@ list.addEventListener("dragover", (e) => {
     const rect = target.getBoundingClientRect();
     const offset = e.clientY - rect.top;
 
+   animateReorder(() => {
     if (offset > rect.height / 2) {
         target.after(dragged);
     } else {
         target.before(dragged);
     }
 });
+});
+
+function animateReorder(callback){
+    const items = document.querySelectorAll(".task-card");
+
+    // ① before位置記録
+    const first = [];
+    items.forEach(el => {
+        first.push({
+            el: el,
+            rect: el.getBoundingClientRect()
+        });
+    });
+
+    // ② DOM変更（並び替え）
+    callback();
+
+    // ③ after位置取得
+    items.forEach((item, i) => {
+        const newRect = item.getBoundingClientRect();
+        const oldRect = first.find(f => f.el === item).rect;
+
+        const dx = oldRect.left - newRect.left;
+        const dy = oldRect.top - newRect.top;
+
+        if(dx || dy){
+            item.style.transform = `translate(${dx}px, ${dy}px)`;
+
+            requestAnimationFrame(() => {
+                item.style.transform = "";
+            });
+        }
+    });
+}
 
 list.addEventListener("dragend", () => {
     if(dragged){
@@ -168,10 +203,13 @@ list.addEventListener("touchmove", (e) => {
         const mid = rect.top + rect.height / 2;
 
         if (y > rect.top && y < rect.bottom) {
-            if (y > mid) {
-                item.after(touchItem);
-            } else {
-                item.before(touchItem);
+           animateReorder(() => {
+    if (y > mid) {
+        item.after(touchItem);
+    } else {
+        item.before(touchItem);
+    }
+});
             }
         }
     });

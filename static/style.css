@@ -129,3 +129,19 @@ button {
         align-items: flex-start;
     }
 }
+
+.task-card {
+    transition: transform 0.25s ease;
+}
+
+/* ドラッグ中 */
+.task-card.dragging {
+    opacity: 0.7;
+    transform: scale(1.05);
+    z-index: 1000;
+}
+
+/* 他の要素が動くとき */
+.task-card.moving {
+    transition: transform 0.25s ease;
+}
