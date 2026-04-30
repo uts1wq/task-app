@@ -219,3 +219,14 @@ button:hover {
 .task-card.over {
     border: 2px dashed #aaa;
 }
+
+/* ===== スマホドラッグ ===== */
+.task-card {
+    touch-action: none; /* ←これ重要 */
+}
+
+.task-card.dragging {
+    opacity: 0.7;
+    transform: scale(1.05);
+    z-index: 1000;
+}

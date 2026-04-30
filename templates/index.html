@@ -203,5 +203,61 @@ function saveOrder(){
 
 </script>
 
+<script>
+
+// ===== スマホ用ドラッグ =====
+let touchItem = null;
+let startY = 0;
+
+const list = document.getElementById("task-list");
+
+list.addEventListener("touchstart", (e) => {
+    const card = e.target.closest(".task-card");
+    if (!card) return;
+
+    touchItem = card;
+    startY = e.touches[0].clientY;
+
+    card.classList.add("dragging");
+});
+
+list.addEventListener("touchmove", (e) => {
+    if (!touchItem) return;
+
+    e.preventDefault(); // ←スクロール止める
+
+    const currentY = e.touches[0].clientY;
+
+    const items = [...document.querySelectorAll(".task-card")];
+
+    items.forEach(item => {
+        if (item === touchItem) return;
+
+        const rect = item.getBoundingClientRect();
+        const middle = rect.top + rect.height / 2;
+
+        if (currentY > rect.top && currentY < rect.bottom) {
+            if (currentY > middle) {
+                item.after(touchItem);
+            } else {
+                item.before(touchItem);
+            }
+        }
+    });
+});
+
+list.addEventListener("touchend", () => {
+    if (!touchItem) return;
+
+    touchItem.classList.remove("dragging");
+    touchItem = null;
+
+    saveOrder(); // ←既存のやつ使う
+});
+
+navigator.vibrate(10);
+
+</script>
+
 </body>
 </html>
