@@ -39,7 +39,7 @@ init_db()
 
 
 # -----------------------
-# メイン画面
+# メイン
 # -----------------------
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -51,12 +51,12 @@ def index():
     conn = sqlite3.connect("tasks.db")
     cursor = conn.cursor()
 
-    # ユーザー名取得
+    # ユーザー名
     cursor.execute("SELECT username FROM users WHERE id=?", (user_id,))
     user = cursor.fetchone()
-    username = user[0] if user else "unknown"
+    username = user[0] if user else "user"
 
-    # 追加処理
+    # 追加
     if request.method == "POST":
         task = request.form.get("task")
         deadline = request.form.get("deadline")
@@ -92,23 +92,18 @@ def index():
     rows = cursor.fetchall()
     conn.close()
 
-    # overdue判定
     today = datetime.today().strftime("%Y-%m-%d")
 
     tasks = []
     for row in rows:
         deadline = row[4]
 
-        is_overdue = False
-        if deadline and deadline < today:
-            is_overdue = True
-
         tasks.append({
             "id": row[0],
             "title": row[2],
             "done": bool(row[3]),
             "deadline": deadline,
-            "overdue": is_overdue
+            "overdue": deadline and deadline < today
         })
 
     return render_template("index.html", tasks=tasks, username=username)
@@ -122,27 +117,20 @@ def toggle(id):
     if "user_id" not in session:
         return redirect("/login")
 
-    user_id = session["user_id"]
-
     conn = sqlite3.connect("tasks.db")
     cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT done FROM tasks WHERE id=? AND user_id=?",
-        (id, user_id)
-    )
+    cursor.execute("SELECT done FROM tasks WHERE id=?", (id,))
     row = cursor.fetchone()
 
     if row:
-        current = row[0]
         cursor.execute(
-            "UPDATE tasks SET done=? WHERE id=? AND user_id=?",
-            (1 - current, id, user_id)
+            "UPDATE tasks SET done=? WHERE id=?",
+            (1 - row[0], id)
         )
 
     conn.commit()
     conn.close()
-
     return redirect("/")
 
 
@@ -154,19 +142,13 @@ def delete(id):
     if "user_id" not in session:
         return redirect("/login")
 
-    user_id = session["user_id"]
-
     conn = sqlite3.connect("tasks.db")
     cursor = conn.cursor()
 
-    cursor.execute(
-        "DELETE FROM tasks WHERE id=? AND user_id=?",
-        (id, user_id)
-    )
+    cursor.execute("DELETE FROM tasks WHERE id=?", (id,))
 
     conn.commit()
     conn.close()
-
     return redirect("/")
 
 
@@ -178,55 +160,37 @@ def edit(id):
     if "user_id" not in session:
         return redirect("/login")
 
-    user_id = session["user_id"]
-
     conn = sqlite3.connect("tasks.db")
     cursor = conn.cursor()
 
     if request.method == "POST":
-        new_task = request.form.get("task")
+        task = request.form.get("task")
         deadline = request.form.get("deadline")
 
-        if new_task:
-            cursor.execute(
-                "UPDATE tasks SET title=?, deadline=? WHERE id=? AND user_id=?",
-                (new_task, deadline, id, user_id)
-            )
-            conn.commit()
+        cursor.execute(
+            "UPDATE tasks SET title=?, deadline=? WHERE id=?",
+            (task, deadline, id)
+        )
 
+        conn.commit()
         conn.close()
         return redirect("/")
 
-    cursor.execute(
-        "SELECT * FROM tasks WHERE id=? AND user_id=?",
-        (id, user_id)
-    )
-    row = cursor.fetchone()
+    cursor.execute("SELECT * FROM tasks WHERE id=?", (id,))
+    task = cursor.fetchone()
     conn.close()
-
-    if row is None:
-        return redirect("/")
-
-    task = {
-        "id": row[0],
-        "title": row[2],
-        "done": bool(row[3]),
-        "deadline": row[4]
-    }
 
     return render_template("edit.html", task=task)
 
 
 # -----------------------
-# 登録
+# register
 # -----------------------
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
         username = request.form.get("username")
-        password = request.form.get("password")
-
-        hashed_password = generate_password_hash(password)
+        password = generate_password_hash(request.form.get("password"))
 
         conn = sqlite3.connect("tasks.db")
         cursor = conn.cursor()
@@ -234,7 +198,7 @@ def register():
         try:
             cursor.execute(
                 "INSERT INTO users (username, password) VALUES (?, ?)",
-                (username, hashed_password)
+                (username, password)
             )
             conn.commit()
         except:
@@ -247,7 +211,7 @@ def register():
 
 
 # -----------------------
-# ログイン
+# login
 # -----------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -258,10 +222,7 @@ def login():
         conn = sqlite3.connect("tasks.db")
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM users WHERE username=?",
-            (username,)
-        )
+        cursor.execute("SELECT * FROM users WHERE username=?", (username,))
         user = cursor.fetchone()
         conn.close()
 
@@ -273,16 +234,13 @@ def login():
 
 
 # -----------------------
-# ログアウト
+# logout
 # -----------------------
 @app.route("/logout")
 def logout():
-    session.pop("user_id", None)
+    session.clear()
     return redirect("/login")
 
 
-# -----------------------
-# 起動
-# -----------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True)
+    app.run(debug=True)

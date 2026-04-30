@@ -1,5 +1,46 @@
-<form method="POST">
-    <input name="username" placeholder="ユーザー名">
-    <input name="password" type="password" placeholder="パスワード">
-    <button>登録</button>
-</form>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>新規登録</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>新規登録</h1>
+
+    <!-- 登録フォーム -->
+    <form method="POST" class="task-form">
+
+        <input 
+            name="username" 
+            placeholder="ユーザー名" 
+            required
+        >
+
+        <input 
+            name="password" 
+            type="password" 
+            placeholder="パスワード" 
+            required
+        >
+
+        <button type="submit">登録</button>
+
+    </form>
+
+    <!-- ログインへ -->
+    <div style="margin-top: 15px;">
+        <a href="/login">ログインはこちら</a>
+    </div>
+
+</div>
+
+</body>
+</html>

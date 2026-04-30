@@ -1,23 +1,63 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-   	 <title>編集</title>
+    <meta charset="UTF-8">
+    <title>タスク編集</title>
 
-   	 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body>
+
+<div class="container">
+
     <h1>タスク編集</h1>
 
-    <form method="POST">
-        <input type="text" name="task" value="{{ task.title }}">
-	<input type="date" name="deadline" value="{{ task.deadline }}">
+    <!-- 編集フォーム -->
+    <form method="POST" class="task-form">
+
+        <input 
+            type="text" 
+            name="task" 
+            value="{{ task[2] if task is iterable else task.title }}" 
+            placeholder="タスク名"
+            required
+        >
+
+        <input 
+            type="date" 
+            name="deadline" 
+            value="{{ task[4] if task is iterable else task.deadline }}"
+        >
+
         <button type="submit">保存</button>
     </form>
 
-    <a href="/">← 戻る</a>
+    <!-- プレビュー -->
+    <div class="task-preview">
+
+        <p>
+            現在のタスク：
+            <strong>
+                {{ task[2] if task is iterable else task.title }}
+            </strong>
+        </p>
+
+        <p>
+            期限：
+            {{ task[4] if task is iterable else task.deadline }}
+        </p>
+
+    </div>
+
+    <!-- 戻る -->
+    <div style="margin-top: 20px;">
+        <a href="/">← 戻る</a>
+    </div>
+
+</div>
+
 </body>
 </html>
