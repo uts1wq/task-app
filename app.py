@@ -2,7 +2,7 @@ import os
 import re
 import cloudinary
 import cloudinary.uploader
-from flask import Flask, render_template, request, redirect, session, g, jsonify, url_for
+from flask import Flask, render_template, request, redirect, session, g, jsonify
 import sqlite3
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -62,6 +62,21 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     );
     """)
+
+    # 古いDBにavatar_urlカラムがない場合に追加
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL")
+        db.commit()
+    except:
+        pass  # 既にカラムがある場合は無視
+
+    # 古いDBにavatarカラムがある場合はavatar_urlにコピー
+    try:
+        db.execute("UPDATE users SET avatar_url = avatar WHERE avatar_url IS NULL AND avatar IS NOT NULL")
+        db.commit()
+    except:
+        pass
+
     db.commit()
 
 with app.app_context():
@@ -151,12 +166,11 @@ def profile():
                 db.commit()
                 success = "パスワードを変更しました"
 
-        # アバター変更（Cloudinaryにアップロード）
+        # アバター変更
         elif action == "avatar":
             file = request.files.get("avatar")
             if file and file.filename:
                 try:
-                    # Cloudinaryにアップロード（user_idをpublic_idに使い上書き可能にする）
                     result = cloudinary.uploader.upload(
                         file,
                         public_id=f"avatars/user_{user['id']}",
