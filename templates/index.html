@@ -1,225 +1,285 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
     <meta charset="UTF-8">
-    <title>Task App</title>
+    <title>ToDoリスト</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
+
+<!-- ヘッダー -->
+<header class="header">
+    <div class="header-title">ToDoリスト</div>
+    <a href="/profile" class="user-badge">
+        <div class="user-avatar">
+            {% if avatar_url %}
+                <img src="{{ avatar_url }}" alt="avatar">
+            {% else %}
+                <span class="avatar-placeholder">{{ username[0].upper() }}</span>
+            {% endif %}
+        </div>
+        <span class="user-name">{{ username }}</span>
+    </a>
+</header>
 
 <div class="container">
 
-    <h1>タスク管理</h1>
-    <p class="user">ログイン中: {{ username }}</p>
-
-    <div class="top-bar">
-        <a href="/logout">ログアウト</a>
-    </div>
-
     <!-- 並び替え -->
     <div class="sort">
-        <a href="/?sort=deadline"
-           class="{% if request.args.get('sort') != 'manual' %}active{% endif %}">
-            期限順
-        </a>
-        <a href="/?sort=manual"
-           class="{% if request.args.get('sort') == 'manual' %}active{% endif %}">
-            手動並び順
-        </a>
+        <a href="#" class="sort-btn active" data-sort="deadline">期限順</a>
+        <a href="#" class="sort-btn" data-sort="manual">手動並び順</a>
     </div>
 
     <!-- 追加フォーム -->
-    <form method="POST" class="task-form">
-        <input type="text" name="task" placeholder="タスクを入力" required>
-        <input type="date" name="deadline">
-        <button type="submit" class="btn-add">追加</button>
-    </form>
+    <div class="task-form">
+        <input type="text" id="new-title" placeholder="タスクを入力...">
+        <input type="date" id="new-deadline">
+        <button id="btn-add">＋ 追加</button>
+    </div>
 
     <!-- タスクリスト -->
     <div class="task-list" id="task-list">
-
-        {% for task in tasks %}
-        <div class="task-card {% if task.overdue %}overdue{% endif %}"
-             data-id="{{ task.id }}">
-
-            <div class="task-info">
-
-                <div id="text-{{ task.id }}" class="task-title {% if task.done %}done{% endif %}">
-                    {% if task.done %}✔ {% endif %}
-                    {{ task.title }}
-                </div>
-
-                <form id="edit-{{ task.id }}"
-                      class="edit-form"
-                      method="POST"
-                      action="/edit/{{ task.id }}"
-                      style="display:none;">
-                    <input type="text" name="task" value="{{ task.title }}" required>
-                    <input type="date" name="deadline" value="{{ task.deadline }}">
-                    <button type="submit" class="btn-edit">保存</button>
-                </form>
-
-                <div class="deadline">
-                    期限: {{ task.deadline if task.deadline else 'なし' }}
-                </div>
-
-            </div>
-
-            <div class="actions">
-                <button type="button" onclick="toggleTask({{ task.id }})" class="btn-done">完了</button>
-                <button type="button" onclick="toggleEdit({{ task.id }})" class="btn-edit">編集</button>
-                <button type="button" onclick="deleteTask({{ task.id }})" class="btn-delete">削除</button>
-            </div>
-
-        </div>
-        {% endfor %}
-
+        <div class="loading">読み込み中...</div>
     </div>
 
 </div>
 
 <script>
+let currentSort = "deadline";
+let tasks = [];
 
-// =========================
-// ソート状態を保持してリロード
-// =========================
-function reloadWithSort() {
-    const sort = new URLSearchParams(location.search).get("sort") || "deadline";
-    location.href = "/?sort=" + sort;
+document.addEventListener("DOMContentLoaded", () => {
+    loadTasks();
+
+    document.getElementById("btn-add").addEventListener("click", addTask);
+    document.getElementById("new-title").addEventListener("keydown", e => {
+        if (e.key === "Enter") addTask();
+    });
+
+    document.querySelectorAll(".sort-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.preventDefault();
+            currentSort = btn.dataset.sort;
+            document.querySelectorAll(".sort-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            loadTasks();
+        });
+    });
+});
+
+async function loadTasks() {
+    const res = await fetch(`/api/tasks?sort=${currentSort}`);
+    tasks = await res.json();
+    renderTasks();
 }
 
-// =========================
-// 完了・削除
-// =========================
-function toggleTask(id) {
-    fetch("/toggle/" + id, { method: "POST" }).then(reloadWithSort);
-}
-
-function deleteTask(id) {
-    if (confirm("削除する？")) {
-        fetch("/delete/" + id, { method: "POST" }).then(reloadWithSort);
+function renderTasks() {
+    const list = document.getElementById("task-list");
+    if (tasks.length === 0) {
+        list.innerHTML = `<div class="empty">タスクがありません。追加してみましょう！</div>`;
+        return;
     }
+    list.innerHTML = "";
+    tasks.forEach(task => list.appendChild(createCard(task)));
+    initDrag();
 }
 
-// =========================
-// 編集フォーム表示切替
-// =========================
-function toggleEdit(id) {
-    const text = document.getElementById("text-" + id);
-    const form = document.getElementById("edit-" + id);
-
-    if (form.style.display === "none") {
-        form.style.display = "flex";
-        text.style.display = "none";
-    } else {
-        form.style.display = "none";
-        text.style.display = "block";
-    }
+function escapeHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
-// =========================
-// ドラッグ（Pointer Events / PC・スマホ共通）
-// =========================
-const list = document.getElementById("task-list");
+function formatDeadline(d) {
+    if (!d) return "期限なし";
+    const [y, m, day] = d.split("-");
+    return `${y}/${m}/${day}`;
+}
 
-let dragging = null;
-let ghost    = null;
-let offsetX  = 0;
-let offsetY  = 0;
+function createCard(task) {
+    const card = document.createElement("div");
+    card.className = "task-card" + (task.overdue && !task.done ? " overdue" : "") + (task.done ? " is-done" : "");
+    card.dataset.id = task.id;
 
-function pointerDown(e) {
-    const card = e.target.closest(".task-card");
-    if (!card) return;
-
-    // ボタン・input操作中はドラッグしない
-    if (e.target.closest("button, input, form")) return;
-
-    e.preventDefault();
-    list.setPointerCapture(e.pointerId);
-
-    dragging = card;
-    dragging.style.opacity = "0";
-
-    // ゴースト（動く本体）を生成
-    const rect = card.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-
-    ghost = card.cloneNode(true);
-    ghost.style.cssText = `
-        position: fixed;
-        width: ${rect.width}px;
-        left: ${rect.left}px;
-        top: ${rect.top}px;
-        pointer-events: none;
-        z-index: 999;
-        transform: rotate(1.5deg) scale(1.03);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-        transition: transform 0.1s ease;
-        border-radius: 10px;
-        background: white;
-        padding: 12px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        opacity: 0.95;
+    card.innerHTML = `
+        <div class="drag-handle">⠿</div>
+        <div class="task-body">
+            <div class="task-view" id="view-${task.id}">
+                <div class="task-title ${task.done ? "done" : ""}">${escapeHtml(task.title)}</div>
+                <div class="task-meta">
+                    <span class="deadline-label">${formatDeadline(task.deadline)}</span>
+                    ${task.overdue && !task.done ? '<span class="badge overdue-badge">期限切れ</span>' : ""}
+                    ${task.done ? '<span class="badge done-badge">完了</span>' : ""}
+                </div>
+            </div>
+            <div class="task-edit" id="edit-${task.id}" style="display:none;">
+                <input type="text" class="edit-title" value="${escapeHtml(task.title)}">
+                <input type="date" class="edit-deadline" value="${task.deadline || ""}">
+                <div class="edit-actions">
+                    <button class="btn-save" onclick="saveEdit(${task.id})">保存</button>
+                    <button class="btn-cancel" onclick="cancelEdit(${task.id})">キャンセル</button>
+                </div>
+            </div>
+        </div>
+        <div class="task-actions">
+            <button class="btn-toggle ${task.done ? "btn-undo" : "btn-done"}" onclick="toggleTask(${task.id})">
+                ${task.done ? "元に戻す" : "完了"}
+            </button>
+            <button class="btn-edit" onclick="toggleEdit(${task.id})">編集</button>
+            <button class="btn-delete" onclick="deleteTask(${task.id})">削除</button>
+        </div>
     `;
-    document.body.appendChild(ghost);
+    return card;
 }
 
-function pointerMove(e) {
-    if (!ghost || !dragging) return;
+async function addTask() {
+    const titleEl = document.getElementById("new-title");
+    const deadlineEl = document.getElementById("new-deadline");
+    const title = titleEl.value.trim();
+    const deadline = deadlineEl.value;
+    if (!title) { titleEl.focus(); return; }
 
-    // ゴーストをポインタに追従
-    ghost.style.left = (e.clientX - offsetX) + "px";
-    ghost.style.top  = (e.clientY - offsetY) + "px";
-
-    // 挿入位置を判定
-    const cards = [...list.querySelectorAll(".task-card")];
-    for (const card of cards) {
-        if (card === dragging) continue;
-        const rect = card.getBoundingClientRect();
-        if (e.clientY < rect.top + rect.height / 2) {
-            list.insertBefore(dragging, card);
-            return;
-        }
-    }
-    list.appendChild(dragging);
-}
-
-function pointerUp() {
-    if (!dragging) return;
-
-    dragging.style.opacity = "";
-    if (ghost) { ghost.remove(); ghost = null; }
-    dragging = null;
-
-    saveOrder();
-}
-
-list.addEventListener("pointerdown", pointerDown);
-list.addEventListener("pointermove", pointerMove);
-list.addEventListener("pointerup",   pointerUp);
-
-// =========================
-// 並び順を保存
-// =========================
-function saveOrder() {
-    const ids = [...document.querySelectorAll(".task-card")]
-        .map(el => el.dataset.id);
-
-    fetch("/reorder", {
+    const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order: ids })
-    }).then(res => {
-        if (!res.ok) console.error("保存失敗", res.status);
+        body: JSON.stringify({ title, deadline })
+    });
+    if (res.ok) {
+        titleEl.value = "";
+        deadlineEl.value = "";
+        loadTasks();
+    }
+}
+
+async function toggleTask(id) {
+    const res = await fetch(`/api/tasks/${id}/toggle`, { method: "POST" });
+    if (res.ok) {
+        const data = await res.json();
+        const task = tasks.find(t => t.id === id);
+        if (task) task.done = data.done;
+        const card = document.querySelector(`.task-card[data-id="${id}"]`);
+        if (card) {
+            card.classList.toggle("is-done", data.done);
+            card.classList.toggle("overdue", task.overdue && !data.done);
+            const titleEl = card.querySelector(".task-title");
+            if (titleEl) titleEl.classList.toggle("done", data.done);
+            card.querySelector(".btn-toggle").textContent = data.done ? "元に戻す" : "完了";
+            card.querySelector(".btn-toggle").className = `btn-toggle ${data.done ? "btn-undo" : "btn-done"}`;
+            // バッジ更新
+            const meta = card.querySelector(".task-meta");
+            const oldBadge = meta.querySelector(".badge");
+            if (oldBadge) oldBadge.remove();
+            if (data.done) {
+                meta.insertAdjacentHTML("beforeend", '<span class="badge done-badge">完了</span>');
+            } else if (task.overdue) {
+                meta.insertAdjacentHTML("beforeend", '<span class="badge overdue-badge">期限切れ</span>');
+            }
+        }
+    }
+}
+
+function toggleEdit(id) {
+    const view = document.getElementById(`view-${id}`);
+    const edit = document.getElementById(`edit-${id}`);
+    const isHidden = edit.style.display === "none";
+    edit.style.display = isHidden ? "flex" : "none";
+    view.style.display = isHidden ? "none" : "block";
+    if (isHidden) edit.querySelector(".edit-title").focus();
+}
+
+function cancelEdit(id) { toggleEdit(id); }
+
+async function saveEdit(id) {
+    const edit = document.getElementById(`edit-${id}`);
+    const title = edit.querySelector(".edit-title").value.trim();
+    const deadline = edit.querySelector(".edit-deadline").value;
+    if (!title) return;
+
+    const res = await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, deadline })
+    });
+    if (res.ok) {
+        const updated = await res.json();
+        const task = tasks.find(t => t.id === id);
+        if (task) { task.title = updated.title; task.deadline = updated.deadline; task.overdue = updated.overdue; }
+        renderTasks();
+    }
+}
+
+async function deleteTask(id) {
+    if (!confirm("このタスクを削除しますか？")) return;
+    const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    if (res.ok) {
+        const card = document.querySelector(`.task-card[data-id="${id}"]`);
+        if (card) {
+            card.style.transition = "opacity 0.2s, transform 0.2s";
+            card.style.opacity = "0";
+            card.style.transform = "translateX(20px)";
+            setTimeout(() => { tasks = tasks.filter(t => t.id !== id); card.remove(); }, 200);
+        }
+    }
+}
+
+function initDrag() {
+    const list = document.getElementById("task-list");
+    let dragging = null, ghost = null, offsetX = 0, offsetY = 0;
+
+    list.addEventListener("pointerdown", e => {
+        const handle = e.target.closest(".drag-handle");
+        const card = e.target.closest(".task-card");
+        if (!handle || !card) return;
+        e.preventDefault();
+        list.setPointerCapture(e.pointerId);
+        dragging = card;
+        dragging.style.opacity = "0";
+        const rect = card.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        ghost = card.cloneNode(true);
+        ghost.style.cssText = `
+            position:fixed; width:${rect.width}px;
+            left:${rect.left}px; top:${rect.top}px;
+            pointer-events:none; z-index:999;
+            transform:rotate(1deg) scale(1.02);
+            box-shadow:0 12px 32px rgba(0,0,0,0.15);
+            border-radius:12px; opacity:0.95;
+            background:white; border:1.5px solid #ccc;
+            padding:14px 18px; display:flex; align-items:center; gap:14px;
+        `;
+        document.body.appendChild(ghost);
+    });
+
+    list.addEventListener("pointermove", e => {
+        if (!ghost || !dragging) return;
+        ghost.style.left = (e.clientX - offsetX) + "px";
+        ghost.style.top  = (e.clientY - offsetY) + "px";
+        const cards = [...list.querySelectorAll(".task-card")];
+        for (const card of cards) {
+            if (card === dragging) continue;
+            const rect = card.getBoundingClientRect();
+            if (e.clientY < rect.top + rect.height / 2) { list.insertBefore(dragging, card); return; }
+        }
+        list.appendChild(dragging);
+    });
+
+    list.addEventListener("pointerup", () => {
+        if (!dragging) return;
+        dragging.style.opacity = "";
+        if (ghost) { ghost.remove(); ghost = null; }
+        dragging = null;
+        saveOrder();
     });
 }
 
+function saveOrder() {
+    const ids = [...document.querySelectorAll(".task-card")].map(el => el.dataset.id);
+    fetch("/api/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: ids })
+    });
+}
 </script>
 </body>
 </html>

@@ -1,51 +1,36 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ログイン</title>
-
+    <title>ログイン — ToDoリスト</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
+<div class="auth-container">
+    <div class="auth-box">
+        <div class="auth-title">ToDoリスト</div>
 
-<div class="container">
+        {% if error %}
+        <div class="auth-error">{{ error }}</div>
+        {% endif %}
 
-    <h1>ログイン</h1>
+        <form method="POST">
+            <div class="form-group">
+                <label class="form-label">ユーザー名</label>
+                <input type="text" name="username" class="form-input" placeholder="ユーザー名" required autofocus>
+            </div>
+            <div class="form-group">
+                <label class="form-label">パスワード</label>
+                <input type="password" name="password" class="form-input" placeholder="パスワード" required>
+            </div>
+            <button type="submit" class="btn-primary">ログイン</button>
+        </form>
 
-    <!-- ログインフォーム -->
-    <form method="POST" class="task-form">
-
-        <input 
-            name="username" 
-            placeholder="ユーザー名" 
-            required
-        >
-
-        <input 
-            name="password" 
-            type="password" 
-            placeholder="パスワード" 
-            required
-        >
-
-        <button type="submit">ログイン</button>
-
-    </form>
-
-    <!-- エラー表示（拡張用） -->
-    {% if error %}
-        <p style="color:red;">{{ error }}</p>
-    {% endif %}
-
-    <!-- 新規登録 -->
-    <div style="margin-top: 15px;">
-        <a href="/register">新規登録はこちら</a>
+        <div class="auth-link">
+            アカウントをお持ちでない方は <a href="/register">新規登録</a>
+        </div>
     </div>
-
 </div>
-
 </body>
 </html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>プロフィール — ToDoリスト</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="header">
+    <div class="header-title">ToDoリスト</div>
+    <a href="/profile" class="user-badge">
+        <div class="user-avatar">
+            {% if avatar_url %}
+                <img src="{{ avatar_url }}" alt="avatar">
+            {% else %}
+                <span class="avatar-placeholder">{{ user.username[0].upper() }}</span>
+            {% endif %}
+        </div>
+        <span class="user-name">{{ user.username }}</span>
+    </a>
+</header>
+
+<div class="container">
+
+    <div class="profile-page">
+
+        <div class="profile-header">
+            <div class="profile-avatar-large">
+                {% if avatar_url %}
+                    <img src="{{ avatar_url }}" alt="avatar" id="avatar-preview">
+                {% else %}
+                    <span class="avatar-placeholder-large" id="avatar-preview-text">{{ user.username[0].upper() }}</span>
+                {% endif %}
+            </div>
+            <div>
+                <h2 class="profile-name">{{ user.username }}</h2>
+                <a href="/" class="back-link">← ToDoリストに戻る</a>
+            </div>
+        </div>
+
+        {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+
+        <!-- プロフィール画像 -->
+        <div class="profile-section">
+            <h3 class="section-title">プロフィール画像</h3>
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="avatar">
+                <div class="avatar-upload-area">
+                    <label class="upload-label">
+                        <input type="file" name="avatar" accept="image/*" onchange="previewAvatar(this)">
+                        画像を選択
+                    </label>
+                    <span class="upload-hint">PNG, JPG, GIF, WEBP 対応</span>
+                </div>
+                {% if errors.avatar %}
+                <div class="field-error">{{ errors.avatar }}</div>
+                {% endif %}
+                <button type="submit" class="btn-primary">画像を変更</button>
+            </form>
+        </div>
+
+        <!-- ユーザー名変更 -->
+        <div class="profile-section">
+            <h3 class="section-title">ユーザー名の変更</h3>
+            <form method="POST">
+                <input type="hidden" name="action" value="username">
+                <div class="form-group">
+                    <label class="form-label">新しいユーザー名</label>
+                    <input type="text" name="username" value="{{ user.username }}" class="form-input" required>
+                    {% if errors.username %}
+                    <div class="field-error">{{ errors.username }}</div>
+                    {% endif %}
+                </div>
+                <button type="submit" class="btn-primary">ユーザー名を変更</button>
+            </form>
+        </div>
+
+        <!-- パスワード変更 -->
+        <div class="profile-section">
+            <h3 class="section-title">パスワードの変更</h3>
+            <form method="POST">
+                <input type="hidden" name="action" value="password">
+                <div class="form-group">
+                    <label class="form-label">現在のパスワード</label>
+                    <input type="password" name="current_password" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">新しいパスワード</label>
+                    <input type="password" name="new_password" class="form-input" required>
+                    <div class="form-hint">英字と数字を含む8文字以上</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">新しいパスワード（確認）</label>
+                    <input type="password" name="confirm_password" class="form-input" required>
+                    {% if errors.password %}
+                    <div class="field-error">{{ errors.password }}</div>
+                    {% endif %}
+                </div>
+                <button type="submit" class="btn-primary">パスワードを変更</button>
+            </form>
+        </div>
+
+        <!-- ログアウト -->
+        <div class="profile-section">
+            <a href="/logout" class="btn-logout">ログアウト</a>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function previewAvatar(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            const preview = document.getElementById("avatar-preview");
+            const text = document.getElementById("avatar-preview-text");
+            if (preview) {
+                preview.src = e.target.result;
+            } else if (text) {
+                const img = document.createElement("img");
+                img.src = e.target.result;
+                img.id = "avatar-preview";
+                text.replaceWith(img);
+            }
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
+</body>
+</html>

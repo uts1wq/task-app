@@ -1,46 +1,60 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>新規登録</title>
-
+    <title>新規登録 — ToDoリスト</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
+<div class="auth-container">
+    <div class="auth-box">
+        <div class="auth-title">新規登録</div>
 
-<div class="container">
+        {% if error %}
+        <div class="auth-error">{{ error }}</div>
+        {% endif %}
 
-    <h1>新規登録</h1>
+        <form method="POST">
+            <div class="form-group">
+                <label class="form-label">ユーザー名</label>
+                <input type="text" name="username" class="form-input" placeholder="ユーザー名" required autofocus>
+            </div>
+            <div class="form-group">
+                <label class="form-label">パスワード</label>
+                <input type="password" name="password" class="form-input" placeholder="パスワード" required
+                       oninput="checkPassword(this.value)">
+                <div class="form-hint">英字と数字を含む8文字以上</div>
+                <div id="pw-feedback" style="font-size:12px; margin-top:4px;"></div>
+            </div>
+            <button type="submit" class="btn-primary">登録する</button>
+        </form>
 
-    <!-- 登録フォーム -->
-    <form method="POST" class="task-form">
-
-        <input 
-            name="username" 
-            placeholder="ユーザー名" 
-            required
-        >
-
-        <input 
-            name="password" 
-            type="password" 
-            placeholder="パスワード" 
-            required
-        >
-
-        <button type="submit">登録</button>
-
-    </form>
-
-    <!-- ログインへ -->
-    <div style="margin-top: 15px;">
-        <a href="/login">ログインはこちら</a>
+        <div class="auth-link">
+            すでにアカウントをお持ちの方は <a href="/login">ログイン</a>
+        </div>
     </div>
-
 </div>
 
+<script>
+function checkPassword(pw) {
+    const el = document.getElementById("pw-feedback");
+    if (!pw) { el.textContent = ""; return; }
+    const hasLetter = /[A-Za-z]/.test(pw);
+    const hasNumber = /[0-9]/.test(pw);
+    const hasLength = pw.length >= 8;
+    if (hasLetter && hasNumber && hasLength) {
+        el.textContent = "✓ 使用可能なパスワードです";
+        el.style.color = "#27ae60";
+    } else {
+        const hints = [];
+        if (!hasLength) hints.push("8文字以上");
+        if (!hasLetter) hints.push("英字を含む");
+        if (!hasNumber) hints.push("数字を含む");
+        el.textContent = "必要: " + hints.join("・");
+        el.style.color = "#c0392b";
+    }
+}
+</script>
 </body>
 </html>
