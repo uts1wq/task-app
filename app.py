@@ -1,20 +1,26 @@
 import os
 import re
-import uuid
+import cloudinary
+import cloudinary.uploader
 from flask import Flask, render_template, request, redirect, session, g, jsonify, url_for
 import sqlite3
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = "secret-key-change-in-production"
 
 DATABASE = "tasks.db"
-UPLOAD_FOLDER = os.path.join("static", "uploads")
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# =======================
+# Cloudinary設定
+# =======================
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+    secure=True
+)
 
 
 # =======================
@@ -34,7 +40,7 @@ def close_db(exception):
 
 
 # =======================
-# DB初期化（既存DB削除してOK）
+# DB初期化
 # =======================
 def init_db():
     db = get_db()
@@ -43,7 +49,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        avatar TEXT DEFAULT NULL
+        avatar_url TEXT DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
@@ -68,11 +74,7 @@ with app.app_context():
 def require_login():
     return "user_id" in session
 
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
 def validate_password(password):
-    """英字・数字を両方含む8文字以上"""
     if len(password) < 8:
         return False
     if not re.search(r"[A-Za-z]", password):
@@ -84,12 +86,13 @@ def validate_password(password):
 def get_current_user():
     if not require_login():
         return None
-    db = get_db()
-    return db.execute("SELECT * FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    return get_db().execute(
+        "SELECT * FROM users WHERE id=?", (session["user_id"],)
+    ).fetchone()
 
 
 # =======================
-# ページ: メイン（SPA）
+# ページ: メイン
 # =======================
 @app.route("/")
 def index():
@@ -98,12 +101,11 @@ def index():
     user = get_current_user()
     if not user:
         return redirect("/login")
-    avatar_url = url_for("static", filename=f"uploads/{user['avatar']}") if user["avatar"] else None
-    return render_template("index.html", username=user["username"], avatar_url=avatar_url)
+    return render_template("index.html", username=user["username"], avatar_url=user["avatar_url"])
 
 
 # =======================
-# ページ: プロフィール編集
+# ページ: プロフィール
 # =======================
 @app.route("/profile", methods=["GET", "POST"])
 def profile():
@@ -144,33 +146,37 @@ def profile():
             elif new_pw != confirm_pw:
                 errors["password"] = "新しいパスワードが一致しません"
             else:
-                db.execute("UPDATE users SET password=? WHERE id=?", (generate_password_hash(new_pw), user["id"]))
+                db.execute("UPDATE users SET password=? WHERE id=?",
+                           (generate_password_hash(new_pw), user["id"]))
                 db.commit()
                 success = "パスワードを変更しました"
 
-        # アバター変更
+        # アバター変更（Cloudinaryにアップロード）
         elif action == "avatar":
             file = request.files.get("avatar")
-            if file and allowed_file(file.filename):
-                # 古いアバターを削除
-                if user["avatar"]:
-                    old_path = os.path.join(UPLOAD_FOLDER, user["avatar"])
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-
-                ext = file.filename.rsplit(".", 1)[1].lower()
-                filename = f"{uuid.uuid4().hex}.{ext}"
-                file.save(os.path.join(UPLOAD_FOLDER, filename))
-                db.execute("UPDATE users SET avatar=? WHERE id=?", (filename, user["id"]))
-                db.commit()
-                success = "プロフィール画像を変更しました"
+            if file and file.filename:
+                try:
+                    # Cloudinaryにアップロード（user_idをpublic_idに使い上書き可能にする）
+                    result = cloudinary.uploader.upload(
+                        file,
+                        public_id=f"avatars/user_{user['id']}",
+                        overwrite=True,
+                        transformation=[
+                            {"width": 200, "height": 200, "crop": "fill", "gravity": "face"}
+                        ]
+                    )
+                    avatar_url = result["secure_url"]
+                    db.execute("UPDATE users SET avatar_url=? WHERE id=?", (avatar_url, user["id"]))
+                    db.commit()
+                    success = "プロフィール画像を変更しました"
+                except Exception as e:
+                    errors["avatar"] = f"アップロードに失敗しました: {str(e)}"
             else:
-                errors["avatar"] = "対応形式: PNG, JPG, GIF, WEBP"
+                errors["avatar"] = "画像ファイルを選択してください"
 
-        user = get_current_user()  # 再取得
+        user = get_current_user()
 
-    avatar_url = url_for("static", filename=f"uploads/{user['avatar']}") if user["avatar"] else None
-    return render_template("profile.html", user=user, avatar_url=avatar_url, errors=errors, success=success)
+    return render_template("profile.html", user=user, avatar_url=user["avatar_url"], errors=errors, success=success)
 
 
 # =======================
@@ -276,10 +282,15 @@ def api_edit(id):
     deadline = data.get("deadline", "") or None
     if not title:
         return jsonify({"error": "title required"}), 400
-    db.execute("UPDATE tasks SET title=?, deadline=? WHERE id=? AND user_id=?", (title, deadline, id, user_id))
+    db.execute("UPDATE tasks SET title=?, deadline=? WHERE id=? AND user_id=?",
+               (title, deadline, id, user_id))
     db.commit()
     today = datetime.today().strftime("%Y-%m-%d")
-    return jsonify({"id": id, "title": title, "deadline": deadline or "", "overdue": bool(deadline and deadline < today)})
+    return jsonify({
+        "id": id, "title": title,
+        "deadline": deadline or "",
+        "overdue": bool(deadline and deadline < today)
+    })
 
 
 # =======================
@@ -306,7 +317,8 @@ def api_reorder():
     user_id = session["user_id"]
     order = request.get_json().get("order", [])
     for index, task_id in enumerate(order):
-        db.execute("UPDATE tasks SET position=? WHERE id=? AND user_id=?", (index, task_id, user_id))
+        db.execute("UPDATE tasks SET position=? WHERE id=? AND user_id=?",
+                   (index, task_id, user_id))
     db.commit()
     return jsonify({"status": "ok"})
 
@@ -320,7 +332,6 @@ def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-
         if not username:
             error = "ユーザー名を入力してください"
         elif not validate_password(password):
@@ -334,7 +345,6 @@ def register():
                 return redirect("/login")
             except:
                 error = "そのユーザー名は既に使われています"
-
     return render_template("register.html", error=error)
 
 
