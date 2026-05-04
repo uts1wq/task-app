@@ -2,6 +2,7 @@ import os
 import re
 import cloudinary
 import cloudinary.uploader
+import cloudinary.utils
 from flask import Flask, render_template, request, redirect, session, g, jsonify
 import sqlite3
 from datetime import datetime
@@ -21,6 +22,17 @@ cloudinary.config(
     api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
     secure=True
 )
+
+def get_avatar_url(user_id):
+    """
+    user_idからCloudinaryのURLを直接生成する。
+    DBに保存しないのでリセットされない。
+    画像が存在しない場合はNoneを返す。
+    """
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME")
+    if not cloud_name:
+        return None
+    return f"https://res.cloudinary.com/{cloud_name}/image/upload/avatars/user_{user_id}"
 
 
 # =======================
@@ -44,39 +56,26 @@ def close_db(exception):
 # =======================
 def init_db():
     db = get_db()
-    db.executescript("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        avatar_url TEXT DEFAULT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        done INTEGER DEFAULT 0,
-        deadline TEXT,
-        position INTEGER DEFAULT 0,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    );
+    # executescriptを使わずに個別にexecuteすることで
+    # 意図しないCOMMITを防ぐ
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )
     """)
-
-    # 古いDBにavatar_urlカラムがない場合に追加
-    try:
-        db.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL")
-        db.commit()
-    except:
-        pass  # 既にカラムがある場合は無視
-
-    # 古いDBにavatarカラムがある場合はavatar_urlにコピー
-    try:
-        db.execute("UPDATE users SET avatar_url = avatar WHERE avatar_url IS NULL AND avatar IS NOT NULL")
-        db.commit()
-    except:
-        pass
-
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            done INTEGER DEFAULT 0,
+            deadline TEXT,
+            position INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
     db.commit()
 
 with app.app_context():
@@ -116,7 +115,9 @@ def index():
     user = get_current_user()
     if not user:
         return redirect("/login")
-    return render_template("index.html", username=user["username"], avatar_url=user["avatar_url"])
+    # DBではなくuser_idからURLを生成
+    avatar_url = get_avatar_url(user["id"])
+    return render_template("index.html", username=user["username"], avatar_url=avatar_url)
 
 
 # =======================
@@ -166,22 +167,20 @@ def profile():
                 db.commit()
                 success = "パスワードを変更しました"
 
-        # アバター変更
+        # アバター変更（CloudinaryにアップロードするだけでDBは更新しない）
         elif action == "avatar":
             file = request.files.get("avatar")
             if file and file.filename:
                 try:
-                    result = cloudinary.uploader.upload(
+                    cloudinary.uploader.upload(
                         file,
                         public_id=f"avatars/user_{user['id']}",
                         overwrite=True,
+                        invalidate=True,  # CDNキャッシュをクリア
                         transformation=[
                             {"width": 200, "height": 200, "crop": "fill", "gravity": "face"}
                         ]
                     )
-                    avatar_url = result["secure_url"]
-                    db.execute("UPDATE users SET avatar_url=? WHERE id=?", (avatar_url, user["id"]))
-                    db.commit()
                     success = "プロフィール画像を変更しました"
                 except Exception as e:
                     errors["avatar"] = f"アップロードに失敗しました: {str(e)}"
@@ -190,7 +189,8 @@ def profile():
 
         user = get_current_user()
 
-    return render_template("profile.html", user=user, avatar_url=user["avatar_url"], errors=errors, success=success)
+    avatar_url = get_avatar_url(user["id"])
+    return render_template("profile.html", user=user, avatar_url=avatar_url, errors=errors, success=success)
 
 
 # =======================
@@ -200,12 +200,10 @@ def profile():
 def api_tasks():
     if not require_login():
         return jsonify({"error": "unauthorized"}), 401
-
     db = get_db()
     user_id = session["user_id"]
     sort = request.args.get("sort", "deadline")
     today = datetime.today().strftime("%Y-%m-%d")
-
     if sort == "manual":
         rows = db.execute("""
             SELECT id, title, done, deadline FROM tasks
@@ -213,17 +211,12 @@ def api_tasks():
         """, (user_id,)).fetchall()
     else:
         rows = db.execute("""
-            SELECT id, title, done, deadline FROM tasks
-            WHERE user_id=?
-            ORDER BY
-                CASE WHEN deadline IS NULL OR deadline='' THEN 1 ELSE 0 END,
-                deadline ASC, id DESC
+            SELECT id, title, done, deadline FROM tasks WHERE user_id=?
+            ORDER BY CASE WHEN deadline IS NULL OR deadline='' THEN 1 ELSE 0 END,
+            deadline ASC, id DESC
         """, (user_id,)).fetchall()
-
     return jsonify([{
-        "id": r["id"],
-        "title": r["title"],
-        "done": bool(r["done"]),
+        "id": r["id"], "title": r["title"], "done": bool(r["done"]),
         "deadline": r["deadline"] or "",
         "overdue": bool(r["deadline"] and r["deadline"] < today)
     } for r in rows])
@@ -236,27 +229,20 @@ def api_tasks():
 def api_add_task():
     if not require_login():
         return jsonify({"error": "unauthorized"}), 401
-
     db = get_db()
     user_id = session["user_id"]
     data = request.get_json()
     title = data.get("title", "").strip()
     deadline = data.get("deadline", "") or None
-
     if not title:
         return jsonify({"error": "title required"}), 400
-
     row = db.execute("SELECT MAX(position) as m FROM tasks WHERE user_id=?", (user_id,)).fetchone()
     new_pos = (row["m"] + 1) if row["m"] is not None else 0
-
-    db.execute(
-        "INSERT INTO tasks (user_id, title, done, deadline, position) VALUES (?, ?, 0, ?, ?)",
-        (user_id, title, deadline, new_pos)
-    )
+    db.execute("INSERT INTO tasks (user_id, title, done, deadline, position) VALUES (?, ?, 0, ?, ?)",
+               (user_id, title, deadline, new_pos))
     db.commit()
     new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     today = datetime.today().strftime("%Y-%m-%d")
-
     return jsonify({
         "id": new_id, "title": title, "done": False,
         "deadline": deadline or "",
@@ -300,11 +286,8 @@ def api_edit(id):
                (title, deadline, id, user_id))
     db.commit()
     today = datetime.today().strftime("%Y-%m-%d")
-    return jsonify({
-        "id": id, "title": title,
-        "deadline": deadline or "",
-        "overdue": bool(deadline and deadline < today)
-    })
+    return jsonify({"id": id, "title": title, "deadline": deadline or "",
+                    "overdue": bool(deadline and deadline < today)})
 
 
 # =======================
